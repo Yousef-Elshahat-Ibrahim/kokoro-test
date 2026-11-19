@@ -42,7 +42,7 @@ $("go").onclick=async()=>{
     let info={};try{info=JSON.parse(A.info())}catch(e){say("Not running inside the Android test app: no native memory data.")}
     say("Device: "+(info.device||"?")+" | Android "+(info.android||"?"));
     say("WebView: "+(info.webview||"?"));
-    say("Local model file: "+(info.localModel||"?")+");
+    say("Local model file: "+(info.localModel||"?"));
     say("CPU threads: "+navigator.hardwareConcurrency+" | deviceMemory hint: "+(navigator.deviceMemory||"n/a")+" GB | crossOriginIsolated: "+self.crossOriginIsolated);
     if(info.lastCrash)say("!! PREVIOUS RUN: "+info.lastCrash);
     say("Engine: "+navigator.userAgent);
