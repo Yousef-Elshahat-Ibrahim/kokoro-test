@@ -14,6 +14,8 @@ audio{width:100%}
 </style></head><body>
 <h1>Kokoro q8 test</h1>
 <p>Loads the model, speaks 6 sentences three times, and reports time and memory. The first run downloads about 86 MB, so use Wi-Fi.</p>
+<button id="pick" style="background:transparent;color:var(--ink);border:1px solid var(--line)">Choose model file (optional)</button>
+<div id="pk"></div>
 <button id="go">Run test</button>
 <div id="st"></div>
 <audio id="pl" controls></audio>
@@ -31,12 +33,16 @@ w(0,"RIFF");v.setUint32(4,36+x.length*2,true);w(8,"WAVEfmt ");v.setUint32(16,16,
 for(let i=0;i<x.length;i++){const s=Math.max(-1,Math.min(1,x[i]));v.setInt16(44+i*2,s<0?s*32768:s*32767,true)}return new Blob([b],{type:"audio/wav"})};
 const SENT=["What are you doing? I didn’t expect that.","Therefore","Free fall","H2O","The quick brown fox jumps over the lazy dog.","Don’t worry about it."];
 
+$("pick").onclick=()=>{try{A.pickModel()}catch(e){$("pk").textContent="Only works inside the Android app."}};
+window.modelPicked=m=>{$("pk").textContent=m};
+try{$("pk").textContent="Model file: "+A.localStatus()}catch(e){}
 $("go").onclick=async()=>{
   const btn=$("go"),st=$("st");btn.disabled=true;out.length=0;
   try{
     let info={};try{info=JSON.parse(A.info())}catch(e){say("Not running inside the Android test app: no native memory data.")}
     say("Device: "+(info.device||"?")+" | Android "+(info.android||"?"));
     say("WebView: "+(info.webview||"?"));
+    say("Local model file: "+(info.localModel||"?")+");
     say("CPU threads: "+navigator.hardwareConcurrency+" | deviceMemory hint: "+(navigator.deviceMemory||"n/a")+" GB | crossOriginIsolated: "+self.crossOriginIsolated);
     if(info.lastCrash)say("!! PREVIOUS RUN: "+info.lastCrash);
     say("Engine: "+navigator.userAgent);
