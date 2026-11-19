@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kokoro q8 test</title>
+<style>
+:root{--bg:#f6f7f9;--ink:#1b1f24;--mute:#5d6672;--line:#d9dde3;--acc:#0b6b5d;--accink:#fff}
+@media(prefers-color-scheme:dark){:root{--bg:#14171a;--ink:#e8ebee;--mute:#9aa4af;--line:#2f353c;--acc:#4cc3b0;--accink:#06201b}}
+body{margin:0;padding:14px;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,sans-serif}
+h1{font-size:1.15rem;margin:0 0 4px}p{margin:4px 0;color:var(--mute)}
+button{font:inherit;font-weight:600;background:var(--acc);color:var(--accink);border:0;border-radius:8px;padding:12px;width:100%;margin:10px 0}
+button:disabled{opacity:.55}
+#st{min-height:1.4em}
+textarea{width:100%;height:55vh;font:12px/1.4 ui-monospace,monospace;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px;box-sizing:border-box}
+audio{width:100%}
+</style></head><body>
+<h1>Kokoro q8 test</h1>
+<p>Loads the model, speaks 6 sentences three times, and reports time and memory. The first run downloads about 86 MB, so use Wi-Fi.</p>
+<button id="go">Run test</button>
+<div id="st"></div>
+<audio id="pl" controls></audio>
+<p>Report (press and hold to select and copy):</p>
+<textarea id="rep" readonly></textarea>
+<script type="module">
+const $=i=>document.getElementById(i), A=window.Android;
+const out=[]; const say=s=>{out.push(s);$("rep").value=out.join("\n");$("rep").scrollTop=1e9};
+const mem=()=>{try{return JSON.parse(A.mem())}catch(e){return null}};
+const nap=()=>new Promise(r=>setTimeout(r,60));
+const med=a=>{const s=[...a].sort((x,y)=>x-y);return s[Math.floor(s.length/2)]};
+const wav=(x,r)=>{const b=new ArrayBuffer(44+x.length*2),v=new DataView(b),w=(o,t)=>{for(let i=0;i<t.length;i++)v.setUint8(o+i,t.charCodeAt(i))};
+w(0,"RIFF");v.setUint32(4,36+x.length*2,true);w(8,"WAVEfmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,r,true);v.setUint32(28,r*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);w(36,"data");v.setUint32(40,x.length*2,true);
+for(let i=0;i<x.length;i++){const s=Math.max(-1,Math.min(1,x[i]));v.setInt16(44+i*2,s<0?s*32768:s*32767,true)}return new Blob([b],{type:"audio/wav"})};
+const SENT=["What are you doing? I didn’t expect that.","Therefore","Free fall","H2O","The quick brown fox jumps over the lazy dog.","Don’t worry about it."];
+
+$("go").onclick=async()=>{
+  const btn=$("go"),st=$("st");btn.disabled=true;out.length=0;
+  try{
+    let info={};try{info=JSON.parse(A.info())}catch(e){say("Not running inside the Android test app: no native memory data.")}
+    say("Device: "+(info.device||"?")+" | Android "+(info.android||"?"));
+    say("WebView: "+(info.webview||"?"));
+    say("CPU threads: "+navigator.hardwareConcurrency+" | deviceMemory hint: "+(navigator.deviceMemory||"n/a")+" GB | crossOriginIsolated: "+self.crossOriginIsolated);
+    if(info.lastCrash)say("!! PREVIOUS RUN: "+info.lastCrash);
+    const m0=mem();if(m0)say("Baseline: total RAM "+m0.totalMB+" MB, available "+m0.availMB+" MB, low-memory threshold "+m0.thresholdMB+" MB");
+    st.textContent="Loading Kokoro (downloads on first run)...";await nap();
+    const t0=performance.now();
+    const {KokoroTTS}=await import("https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm");
+    const t1=performance.now();
+    const tts=await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX",{dtype:"q8",device:"wasm"});
+    const t2=performance.now();
+    const m1=mem();
+    say("Library load: "+((t1-t0)/1e3).toFixed(1)+" s | Model load: "+((t2-t1)/1e3).toFixed(1)+" s (includes download on first run)");
+    if(m1)say("After load: available "+m1.availMB+" MB (change "+(m1.availMB-m0.availMB)+" MB) | app process PSS "+m1.appPssMB+" MB");
+    let minAvail=m1?m1.availMB:null,lowSeen=false;const gen=[],rtf=[];let first=null,k=0;
+    for(let pass=1;pass<=3;pass++)for(const text of SENT){
+      k++;st.textContent="Generating "+k+" of "+(3*SENT.length)+"...";await nap();
+      const a=performance.now();const o=await tts.generate(text,{voice:"af_heart"});const g=(performance.now()-a)/1e3;
+      const len=o.audio.length/o.sampling_rate;gen.push(g);rtf.push(len/g);
+      if(!first)first=g;
+      if(k===1)$("pl").src=URL.createObjectURL(wav(o.audio,o.sampling_rate));
+      const m=mem();if(m){minAvail=Math.min(minAvail,m.availMB);if(m.low)lowSeen=true}
+      say("#"+k+" "+JSON.stringify(text.slice(0,24))+": "+g.toFixed(2)+" s for "+len.toFixed(2)+" s audio ("+(len/g).toFixed(2)+"x)"+(m?" | avail "+m.availMB+" MB":""));
+    }
+    say("---- Summary ----");
+    say("First generation (includes warm-up): "+first.toFixed(2)+" s");
+    say("Median generation: "+med(gen).toFixed(2)+" s | Median speed: "+med(rtf).toFixed(2)+"x real time");
+    say("Slowest generation: "+Math.max(...gen).toFixed(2)+" s");
+    if(m0&&minAvail!=null)say("Lowest available RAM: "+minAvail+" MB (drop of "+(m0.availMB-minAvail)+" MB from baseline)");
+    say("Android reported low-memory state during test: "+(lowSeen?"YES":"no"));
+    say("RESULT: finished without the web process being killed.");
+    st.textContent="Done. First sentence is loaded in the player.";
+  }catch(e){say("ERROR: "+(e&&e.message||e));st.textContent="Failed. See report."}
+  btn.disabled=false;
+};
+</script></body></html>
