@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
             }
             @Override public boolean onRenderProcessGone(WebView v, RenderProcessGoneDetail d) {
                 String why = d.didCrash() ? "web process crashed" : "web process killed by Android (most likely out of memory)";
-                getSharedPreferences("t", 0).edit().putString("crash", why + " at " + new java.util.Date()).apply();
+                getSharedPreferences("t", 0).edit().putString("crash", why + " | last step reached: " + getSharedPreferences("t", 0).getString("mark", "none") + " | " + new java.util.Date()).commit();
                 recreate();
                 return true;
             }
@@ -51,6 +51,10 @@ public class MainActivity extends Activity {
     }
 
     class Bridge {
+        @JavascriptInterface public void mark(String m) {
+            getSharedPreferences("t", 0).edit().putString("mark", m).commit();
+        }
+
         @JavascriptInterface public String mem() {
             try {
                 ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);

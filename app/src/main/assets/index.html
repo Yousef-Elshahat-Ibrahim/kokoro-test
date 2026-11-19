@@ -23,6 +23,7 @@ audio{width:100%}
 const $=i=>document.getElementById(i), A=window.Android;
 const out=[]; const say=s=>{out.push(s);$("rep").value=out.join("\n");$("rep").scrollTop=1e9};
 const mem=()=>{try{return JSON.parse(A.mem())}catch(e){return null}};
+const mk=s=>{try{A.mark(s)}catch(e){}};
 const nap=()=>new Promise(r=>setTimeout(r,60));
 const med=a=>{const s=[...a].sort((x,y)=>x-y);return s[Math.floor(s.length/2)]};
 const wav=(x,r)=>{const b=new ArrayBuffer(44+x.length*2),v=new DataView(b),w=(o,t)=>{for(let i=0;i<t.length;i++)v.setUint8(o+i,t.charCodeAt(i))};
@@ -38,12 +39,20 @@ $("go").onclick=async()=>{
     say("WebView: "+(info.webview||"?"));
     say("CPU threads: "+navigator.hardwareConcurrency+" | deviceMemory hint: "+(navigator.deviceMemory||"n/a")+" GB | crossOriginIsolated: "+self.crossOriginIsolated);
     if(info.lastCrash)say("!! PREVIOUS RUN: "+info.lastCrash);
+    say("Engine: "+navigator.userAgent);
+    let simd=false;try{simd=WebAssembly.validate(new Uint8Array([0,97,115,109,1,0,0,0,1,5,1,96,0,1,123,3,2,1,0,10,10,1,8,0,65,0,253,15,253,98,11]))}catch(e){}
+    say("WebAssembly SIMD supported: "+simd+" | SharedArrayBuffer: "+(typeof SharedArrayBuffer!=="undefined"));
+    mk("start");
     const m0=mem();if(m0)say("Baseline: total RAM "+m0.totalMB+" MB, available "+m0.availMB+" MB, low-memory threshold "+m0.thresholdMB+" MB");
     st.textContent="Loading Kokoro (downloads on first run)...";await nap();
+    mk("importing kokoro-js");
     const t0=performance.now();
     const {KokoroTTS}=await import("https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm");
     const t1=performance.now();
-    const tts=await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX",{dtype:"q8",device:"wasm"});
+    mk("kokoro-js imported; loading model");
+    let lastPct=-1;
+    const tts=await KokoroTTS.from_pretrained("onnx-community/Kokoro-82M-v1.0-ONNX",{dtype:"q8",device:"wasm",progress_callback:p=>{if(p&&p.status==="progress"){const q=Math.floor(p.progress/20)*20;if(q!==lastPct){lastPct=q;mk("downloading model "+q+"%")}}else if(p&&p.status){mk("model status: "+p.status)}}});
+    mk("model loaded");
     const t2=performance.now();
     const m1=mem();
     say("Library load: "+((t1-t0)/1e3).toFixed(1)+" s | Model load: "+((t2-t1)/1e3).toFixed(1)+" s (includes download on first run)");
@@ -51,7 +60,7 @@ $("go").onclick=async()=>{
     let minAvail=m1?m1.availMB:null,lowSeen=false;const gen=[],rtf=[];let first=null,k=0;
     for(let pass=1;pass<=3;pass++)for(const text of SENT){
       k++;st.textContent="Generating "+k+" of "+(3*SENT.length)+"...";await nap();
-      const a=performance.now();const o=await tts.generate(text,{voice:"af_heart"});const g=(performance.now()-a)/1e3;
+      mk("generating #"+k);const a=performance.now();const o=await tts.generate(text,{voice:"af_heart"});const g=(performance.now()-a)/1e3;
       const len=o.audio.length/o.sampling_rate;gen.push(g);rtf.push(len/g);
       if(!first)first=g;
       if(k===1)$("pl").src=URL.createObjectURL(wav(o.audio,o.sampling_rate));
